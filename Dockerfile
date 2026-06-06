@@ -3,34 +3,21 @@ FROM python:3.11-slim-bookworm
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
-# Systemabhängigkeiten für PyMuPDF
+# Systemabhängigkeiten für PyMuPDF und git
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libmupdf-dev \
+    && apt-get install -y --no-install-recommends libmupdf-dev git \
     && rm -rf /var/lib/apt/lists/*
 
-# Abhängigkeiten zuerst kopieren (Layer-Caching)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Quellcode aus Git klonen
+ARG GIT_REPO=https://github.com/california444/invoiceWatcher.git
+ARG GIT_REF=main
+RUN git clone --depth=1 --branch ${GIT_REF} ${GIT_REPO} .
 
-# Quellcode kopieren (.env wird bewusst nicht kopiert)
-COPY *.py .
+# Abhängigkeiten installieren
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Nicht-Root-Benutzer
 RUN addgroup --system app && adduser --system --ingroup app app
 USER app
-
-ENV IMAP_HOST=${IMAP_HOST} \
-    IMAP_PORT=${IMAP_PORT} \
-    IMAP_USER=${IMAP_USER} \
-    IMAP_PASSWORD=${IMAP_PASSWORD} \
-    IMAP_MAILBOX=${IMAP_MAILBOX} \
-    SMTP_HOST=${SMTP_HOST} \
-    SMTP_PORT=${SMTP_PORT} \
-    SMTP_USER=${SMTP_USER} \
-    SMTP_PASSWORD=${SMTP_PASSWORD} \
-    LLM_API_BASE_URL=${LLM_API_BASE_URL} \
-    LLM_API_KEY=${LLM_API_KEY} \
-    LLM_MODEL=${LLM_MODEL} \
-    LLM_MAX_PAGES=${LLM_MAX_PAGES}
 
 ENTRYPOINT ["python", "invoice_watcher.py"]
