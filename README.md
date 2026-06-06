@@ -1,10 +1,11 @@
 # Invoice Watcher
 
-Überwacht einen E-Mail-Posteingang per IMAP IDLE und erzeugt automatisch einen **GiroCode / EPC-QR-Code** aus eingehenden Rechnungen.
+Überwacht einen E-Mail-Posteingang per IMAP IDLE und erzeugt automatisch
+einen **GiroCode / EPC-QR-Code** aus eingehenden Rechnungen.
 
 ## Funktionsweise
 
-```
+```text
 Neue E-Mail mit PDF-Anhang
         │
         ▼
@@ -27,7 +28,7 @@ Neue E-Mail mit PDF-Anhang
         │
         ▼
   E-Mail mit GiroCode-PNG
-  an Absenderadresse senden
+  an Empfängeradresse senden
 ```
 
 ## Voraussetzungen
@@ -46,7 +47,7 @@ Der LLM-Fallback nutzt eine externe OpenAI-kompatible API. Empfohlen wird [OpenR
 **Verfügbare Modelle auf OpenRouter (Stand Juni 2026):**
 
 | Modell | Größe | Kosten/Seite | Empfehlung |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `qwen/qwen3-vl-8b-instruct` | 8B | ~$0.00005 | Einstieg, schnell |
 | `qwen/qwen3-vl-32b-instruct` | 32B | ~$0.0002 | Gute Balance |
 | `qwen/qwen2.5-vl-72b-instruct` | 72B | ~$0.0004 | Bewährt für Dokumente |
@@ -75,7 +76,7 @@ cp .env.example .env
 Dann `.env` mit den eigenen Zugangsdaten befüllen:
 
 | Variable | Beschreibung | Beispiel |
-|---|---|---|
+| --- | --- | --- |
 | `IMAP_HOST` | IMAP-Serveradresse | `imap.gmail.com` |
 | `IMAP_PORT` | IMAP-Port (SSL) | `993` |
 | `IMAP_USER` | E-Mail-Adresse | `you@gmail.com` |
@@ -114,7 +115,8 @@ Beenden mit `Ctrl+C`.
 
 ### Als Hintergrunddienst (macOS launchd)
 
-Für automatischen Start beim Login eine Datei `~/Library/LaunchAgents/com.invoicewatcher.plist` anlegen:
+Für automatischen Start beim Login eine Datei
+`~/Library/LaunchAgents/com.invoicewatcher.plist` anlegen:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -152,22 +154,33 @@ launchctl load ~/Library/LaunchAgents/com.invoicewatcher.plist
 ### Strukturierte E-Rechnungen (automatisch, kein LLM nötig)
 
 | Format | Beschreibung |
-|---|---|
+| --- | --- |
 | **ZUGFeRD / Factur-X** | XML eingebettet in PDF (gängig in D/A/CH/FR) |
 | **XRechnung CII** | Standalone-XML als Anhang (Cross Industry Invoice) |
 | **XRechnung UBL** | Standalone-XML als Anhang (Universal Business Language) |
 
 ### LLM-Fallback (OpenAI-kompatible API)
 
-Wenn kein strukturiertes Format erkannt wird, werden PDF-Seiten als Bilder (150 DPI) an das konfigurierte Vision-Modell gesendet. Die Anzahl der Seiten ist über `LLM_MAX_PAGES` steuerbar (Standard: 3, `0` = alle Seiten). Das Modell prüft, ob es sich um eine Rechnung handelt, und extrahiert IBAN, BIC, Betrag und Verwendungszweck.
+Wenn kein strukturiertes Format erkannt wird, werden PDF-Seiten als Bilder
+(150 DPI) an das konfigurierte Vision-Modell gesendet. Die Anzahl der Seiten
+ist über `LLM_MAX_PAGES` steuerbar (Standard: 3, `0` = alle Seiten). Das
+Modell prüft, ob es sich um eine Rechnung handelt, und extrahiert IBAN, BIC,
+Betrag und Verwendungszweck.
 
-> **Hinweis:** LLM-Extraktion ist fehleranfällig. Die versendete E-Mail enthält zur Sicherheit immer auch die extrahierten Felder im Textbody sowie die Quelle der Daten (`ZUGFeRD/Factur-X`, `XRechnung` oder `LLM (Modellname)`) zur manuellen Prüfung.
+> **Hinweis:** LLM-Extraktion ist fehleranfällig. Die versendete E-Mail
+> enthält zur Sicherheit immer auch die extrahierten Felder im Textbody sowie
+> die Quelle der Daten (`ZUGFeRD/Factur-X`, `XRechnung` oder
+> `LLM (Modellname)`) zur manuellen Prüfung.
 
 ## GiroCode / EPC-QR-Code
 
-Der erzeugte QR-Code entspricht dem **EPC069-12 v2.1 Standard** (European Payments Council). Er kann mit jeder gängigen Banking-App (z. B. Deutsche Bank, Sparkasse, ING, DKB, N26) direkt gescannt werden, um eine SEPA-Überweisung vorzubefüllen.
+Der erzeugte QR-Code entspricht dem **EPC069-12 v2.1 Standard** (European
+Payments Council). Er kann mit jeder gängigen Banking-App (z. B. Deutsche
+Bank, Sparkasse, ING, DKB, N26) direkt gescannt werden, um eine
+SEPA-Überweisung vorzubefüllen.
 
 Enthaltene Felder:
+
 - Empfänger (Name)
 - IBAN
 - BIC (optional, seit SEPA 2016 nicht mehr zwingend)
@@ -178,7 +191,7 @@ Der QR-Code wird als `girocode.png` an die versendete E-Mail angehängt.
 
 ## Dateiübersicht
 
-```
+```text
 invoice_watcher/
 ├── invoice_watcher.py   # Entry-Point, IMAP-IDLE-Loop, Orchestrierung
 ├── invoice_parser.py    # ZUGFeRD / XRechnung XML-Extraktion
@@ -191,10 +204,14 @@ invoice_watcher/
 
 ## Fehlerbehebung
 
-**IMAP IDLE wird nicht unterstützt**  
-Manche Anbieter unterstützen IDLE nicht. `imapclient` fällt in diesem Fall auf reguläres Polling zurück. Betrieb ist trotzdem möglich, aber weniger effizient.
+### IMAP IDLE wird nicht unterstützt**
 
-**API-Key ungültig oder Modell nicht gefunden**  
+Manche Anbieter unterstützen IDLE nicht. `imapclient` fällt in diesem Fall
+auf reguläres Polling zurück. Betrieb ist trotzdem möglich, aber weniger
+effizient.
+
+### API-Key ungültig oder Modell nicht gefunden**
+
 ```bash
 # Verfügbare Modelle abfragen:
 python3 -c "
@@ -205,10 +222,14 @@ for m in client.models.list().data:
 "
 ```
 
-**`factur-x` erkennt kein eingebettetes XML**  
-Nicht alle PDFs enthalten ZUGFeRD/Factur-X-Daten, auch wenn sie als E-Rechnung bezeichnet werden. In diesem Fall greift automatisch der LLM-Fallback.
+**`factur-x` erkennt kein eingebettetes XML**
 
-**E-Mail wird nicht gesendet (SMTP-Fehler)**  
-- Port 587: STARTTLS wird erwartet – Anbieter muss STARTTLS unterstützen.  
-- Port 465: SMTP_SSL – älteres, aber weit verbreitetes Verfahren.  
+Nicht alle PDFs enthalten ZUGFeRD/Factur-X-Daten, auch wenn sie als
+E-Rechnung bezeichnet werden. In diesem Fall greift automatisch der
+LLM-Fallback.
+
+### E-Mail wird nicht gesendet (SMTP-Fehler)**
+
+- Port 587: STARTTLS wird erwartet – Anbieter muss STARTTLS unterstützen.
+- Port 465: SMTP_SSL – älteres, aber weit verbreitetes Verfahren.
 - Bei Gmail / GMX unbedingt App-Passwörter verwenden.
