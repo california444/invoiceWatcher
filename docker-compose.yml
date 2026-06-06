@@ -1,0 +1,26 @@
+services:
+  invoice-watcher:
+    build: .
+    image: invoice-watcher:latest
+    container_name: invoice-watcher
+    restart: unless-stopped
+    environment:
+      TZ: "Europe/Berlin"
+      IMAP_HOST: "imap.example.com"
+      IMAP_PORT: "993"
+      IMAP_USER: "your@email.com"
+      IMAP_PASSWORD: "your-imap-password"
+      IMAP_MAILBOX: "INBOX"
+      SMTP_HOST: "smtp.example.com"
+      SMTP_PORT: "587"
+      SMTP_USER: "your@email.com"
+      SMTP_PASSWORD: "your-smtp-password"
+      LLM_API_BASE_URL: "https://openrouter.ai/api/v1"
+      LLM_API_KEY: "sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxx"
+      LLM_MODEL: "qwen/qwen3-vl-8b-instruct"
+      LLM_MAX_PAGES: "3"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "1"
