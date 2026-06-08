@@ -143,6 +143,27 @@ def run(account: ImapAccount) -> None:
             time.sleep(_RECONNECT_DELAY_SECS)
 
 
+_ICLOUD_IDLE_ERRORS = (
+    "Unexpected IDLE response",
+    "Server replied with a response that violates the IMAP protocol",
+)
+
+
+def _is_icloud_idle_error(exc: Exception) -> bool:
+    return any(msg in str(exc) for msg in _ICLOUD_IDLE_ERRORS)
+
+
+def _idle_start(client: IMAPClient, account: ImapAccount) -> None:
+    """Startet IDLE nach dem Leeren ausstehender Server-Antworten (iCloud-kompatibel)."""
+    # NOOP lässt den Server alle gepufferten untagged Responses (z. B. FETCH FLAGS)
+    # abschicken, sodass idle() danach sauber starten kann.
+    try:
+        client.noop()
+    except Exception:
+        pass
+    client.idle()
+
+
 def _idle_session(account: ImapAccount) -> None:
     """Führt eine IMAP-Sitzung mit IDLE-Loop durch."""
     ssl_context = ssl.create_default_context(cafile=certifi.where())
@@ -156,7 +177,7 @@ def _idle_session(account: ImapAccount) -> None:
         _process_unseen(client, processed_uids, account)
 
         idle_start = time.monotonic()
-        client.idle()
+        _idle_start(client, account)
         logger.info("[%s] IDLE aktiv – warte auf neue Nachrichten…", account.user)
 
         while True:
@@ -164,7 +185,19 @@ def _idle_session(account: ImapAccount) -> None:
             elapsed = time.monotonic() - idle_start
             timeout = max(5, _IDLE_REFRESH_SECS - int(elapsed))
 
-            responses = client.idle_check(timeout=timeout)
+            try:
+                responses = client.idle_check(timeout=timeout)
+            except Exception as exc:
+                # iCloud sendet während IDLE unaufgefordert FETCH-Responses
+                # (z. B. Flag-Änderungen). imapclient wirft dafür eine Exception.
+                # IDLE neu starten statt die Verbindung zu trennen.
+                if _is_icloud_idle_error(exc):
+                    logger.debug("[%s] Unerwartete IDLE-Antwort ignoriert: %s", account.user, exc)
+                    client.idle_done()
+                    idle_start = time.monotonic()
+                    _idle_start(client, account)
+                    continue
+                raise
 
             # Neue Nachrichten vorhanden?
             has_new = any(
@@ -176,13 +209,13 @@ def _idle_session(account: ImapAccount) -> None:
                 client.idle_done()
                 _process_unseen(client, processed_uids, account)
                 idle_start = time.monotonic()
-                client.idle()
+                _idle_start(client, account)
             elif time.monotonic() - idle_start >= _IDLE_REFRESH_SECS:
                 # IDLE erneuern, um Server-Timeout zu vermeiden
                 client.idle_done()
                 logger.debug("[%s] IDLE erneuert.", account.user)
                 idle_start = time.monotonic()
-                client.idle()
+                _idle_start(client, account)
 
 
 def _process_unseen(client: IMAPClient, processed_uids: set[int], account: ImapAccount) -> None:
@@ -193,12 +226,20 @@ def _process_unseen(client: IMAPClient, processed_uids: set[int], account: ImapA
         return
 
     logger.info("[%s] %d neue ungelesene Nachricht(en) gefunden.", account.user, len(new_uids))
-    messages = client.fetch(new_uids, ["RFC822"])
+    # BODY.PEEK[] statt RFC822: markiert Nachrichten nicht automatisch als \Seen,
+    # sodass iCloud keine unaufgeforderten FLAGS-Responses schickt.
+    messages = client.fetch(new_uids, ["BODY.PEEK[]"])
     for uid, data in messages.items():
-        raw: Optional[bytes] = data.get(b"RFC822")
+        raw: Optional[bytes] = data.get(b"BODY[]")
         if not raw:
+            logger.debug("[%s] UID %d: kein Nachrichteninhalt im Fetch-Ergebnis.", account.user, uid)
             continue
         processed_uids.add(uid)
+        # Nachricht explizit als gelesen markieren
+        try:
+            client.set_flags([uid], [b"\\Seen"])
+        except Exception:
+            pass
         try:
             _handle_message(uid, raw, account)
         except Exception as exc:
