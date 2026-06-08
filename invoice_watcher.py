@@ -9,6 +9,11 @@ Workflow:
   5. Aus den Zahlungsdaten einen GiroCode/EPC-QR-Code erzeugen.
   6. QR-Code per E-Mail an die konfigurierte Adresse senden.
 
+Mehrere IMAP-Konten:
+  Nummerierte Env-Vars IMAP_HOST_0, IMAP_HOST_1, … definieren mehrere Konten.
+  Jedes Konto wird in einem eigenen Thread überwacht.
+  Fallback: IMAP_HOST (ohne Suffix) für ein einzelnes Konto.
+
 Starten:
   cp .env.example .env   # Zugangsdaten eintragen
   pip install -r requirements.txt
@@ -18,7 +23,9 @@ import email
 import logging
 import os
 import ssl
+import threading
 import time
+from dataclasses import dataclass
 from email.message import Message
 from typing import Optional
 
@@ -46,12 +53,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 load_dotenv()
 
-IMAP_HOST = os.environ["IMAP_HOST"]
-IMAP_PORT = int(os.getenv("IMAP_PORT", "993"))
-IMAP_USER = os.environ["IMAP_USER"]
-IMAP_PASSWORD = os.environ["IMAP_PASSWORD"]
-IMAP_MAILBOX = os.getenv("IMAP_MAILBOX", "INBOX")
-
 SMTP_HOST = os.environ["SMTP_HOST"]
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.environ["SMTP_USER"]
@@ -69,42 +70,94 @@ _RECONNECT_DELAY_SECS = 30
 
 
 # ---------------------------------------------------------------------------
+# IMAP-Konto-Konfiguration
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ImapAccount:
+    host: str
+    port: int
+    user: str
+    password: str
+    mailbox: str
+
+
+def load_accounts() -> list[ImapAccount]:
+    """
+    Lädt IMAP-Konten aus nummerierten Env-Vars (IMAP_HOST_0, IMAP_HOST_1, …).
+    Fallback: IMAP_HOST (ohne Suffix) für ein einzelnes Konto.
+    """
+    accounts: list[ImapAccount] = []
+    index = 0
+    while True:
+        host = os.getenv(f"IMAP_HOST_{index}")
+        if not host:
+            break
+        accounts.append(ImapAccount(
+            host=host,
+            port=int(os.getenv(f"IMAP_PORT_{index}", "993")),
+            user=os.environ[f"IMAP_USER_{index}"],
+            password=os.environ[f"IMAP_PASSWORD_{index}"],
+            mailbox=os.getenv(f"IMAP_MAILBOX_{index}", "INBOX"),
+        ))
+        index += 1
+
+    # Fallback auf einzelnes Konto ohne Suffix
+    if not accounts and os.getenv("IMAP_HOST"):
+        accounts.append(ImapAccount(
+            host=os.environ["IMAP_HOST"],
+            port=int(os.getenv("IMAP_PORT", "993")),
+            user=os.environ["IMAP_USER"],
+            password=os.environ["IMAP_PASSWORD"],
+            mailbox=os.getenv("IMAP_MAILBOX", "INBOX"),
+        ))
+
+    if not accounts:
+        raise RuntimeError(
+            "Keine IMAP-Konten konfiguriert. "
+            "Bitte IMAP_HOST_0 / IMAP_USER_0 / … oder IMAP_HOST / IMAP_USER / … setzen."
+        )
+
+    return accounts
+
+
+# ---------------------------------------------------------------------------
 # IMAP IDLE Loop
 # ---------------------------------------------------------------------------
 
-def run() -> None:
-    """Hauptschleife: verbindet sich mit IMAP und läuft bis KeyboardInterrupt."""
-    logger.info("Invoice Watcher gestartet. Überwache %s auf %s", IMAP_MAILBOX, IMAP_HOST)
+def run(account: ImapAccount) -> None:
+    """Hauptschleife für ein Konto: verbindet sich und läuft bis KeyboardInterrupt."""
+    logger.info("[%s] Invoice Watcher gestartet. Überwache %s auf %s",
+                account.user, account.mailbox, account.host)
     while True:
         try:
-            _idle_session()
+            _idle_session(account)
         except KeyboardInterrupt:
-            logger.info("Invoice Watcher beendet.")
+            logger.info("[%s] Invoice Watcher beendet.", account.user)
             break
         except Exception as exc:
             logger.error(
-                "Verbindung unterbrochen: %s – erneuter Versuch in %d s",
-                exc,
-                _RECONNECT_DELAY_SECS,
+                "[%s] Verbindung unterbrochen: %s – erneuter Versuch in %d s",
+                account.user, exc, _RECONNECT_DELAY_SECS,
             )
             time.sleep(_RECONNECT_DELAY_SECS)
 
 
-def _idle_session() -> None:
+def _idle_session(account: ImapAccount) -> None:
     """Führt eine IMAP-Sitzung mit IDLE-Loop durch."""
     ssl_context = ssl.create_default_context(cafile=certifi.where())
-    with IMAPClient(IMAP_HOST, port=IMAP_PORT, ssl=True, ssl_context=ssl_context) as client:
-        client.login(IMAP_USER, IMAP_PASSWORD)
-        client.select_folder(IMAP_MAILBOX, readonly=False)
-        logger.info("IMAP-Verbindung hergestellt.")
+    with IMAPClient(account.host, port=account.port, ssl=True, ssl_context=ssl_context) as client:
+        client.login(account.user, account.password)
+        client.select_folder(account.mailbox, readonly=False)
+        logger.info("[%s] IMAP-Verbindung hergestellt.", account.user)
 
         # Beim Start alle bereits ungelesenen Nachrichten verarbeiten
         processed_uids: set[int] = set()
-        _process_unseen(client, processed_uids)
+        _process_unseen(client, processed_uids, account)
 
         idle_start = time.monotonic()
         client.idle()
-        logger.info("IDLE aktiv – warte auf neue Nachrichten…")
+        logger.info("[%s] IDLE aktiv – warte auf neue Nachrichten…", account.user)
 
         while True:
             # Wie lange noch bis zum nächsten IDLE-Refresh?
@@ -121,25 +174,25 @@ def _idle_session() -> None:
 
             if has_new:
                 client.idle_done()
-                _process_unseen(client, processed_uids)
+                _process_unseen(client, processed_uids, account)
                 idle_start = time.monotonic()
                 client.idle()
             elif time.monotonic() - idle_start >= _IDLE_REFRESH_SECS:
                 # IDLE erneuern, um Server-Timeout zu vermeiden
                 client.idle_done()
-                logger.debug("IDLE erneuert.")
+                logger.debug("[%s] IDLE erneuert.", account.user)
                 idle_start = time.monotonic()
                 client.idle()
 
 
-def _process_unseen(client: IMAPClient, processed_uids: set[int]) -> None:
+def _process_unseen(client: IMAPClient, processed_uids: set[int], account: ImapAccount) -> None:
     """Holt alle UNSEEN-Nachrichten und verarbeitet noch nicht behandelte."""
     uids = client.search(["UNSEEN"])
     new_uids = [u for u in uids if u not in processed_uids]
     if not new_uids:
         return
 
-    logger.info("%d neue ungelesene Nachricht(en) gefunden.", len(new_uids))
+    logger.info("[%s] %d neue ungelesene Nachricht(en) gefunden.", account.user, len(new_uids))
     messages = client.fetch(new_uids, ["RFC822"])
     for uid, data in messages.items():
         raw: Optional[bytes] = data.get(b"RFC822")
@@ -147,16 +200,17 @@ def _process_unseen(client: IMAPClient, processed_uids: set[int]) -> None:
             continue
         processed_uids.add(uid)
         try:
-            _handle_message(uid, raw)
+            _handle_message(uid, raw, account)
         except Exception as exc:
-            logger.error("Fehler bei Verarbeitung von UID %d: %s", uid, exc, exc_info=True)
+            logger.error("[%s] Fehler bei Verarbeitung von UID %d: %s",
+                         account.user, uid, exc, exc_info=True)
 
 
 # ---------------------------------------------------------------------------
 # Nachrichtenverarbeitung
 # ---------------------------------------------------------------------------
 
-def _handle_message(uid: int, raw: bytes) -> None:
+def _handle_message(uid: int, raw: bytes, account: ImapAccount) -> None:
     """Verarbeitet eine einzelne E-Mail-Nachricht."""
     msg = email.message_from_bytes(raw)
     subject = msg.get("Subject", "(kein Betreff)")
@@ -164,35 +218,35 @@ def _handle_message(uid: int, raw: bytes) -> None:
     message_id = msg.get("Message-ID", "")
     recipient = msg.get("To", "")
     if not recipient:
-        logger.warning("UID %d: kein To-Header – übersprungen.", uid)
+        logger.warning("[%s] UID %d: kein To-Header – übersprungen.", account.user, uid)
         return
-    logger.info("Verarbeite UID %d von %s: %s", uid, sender, subject)
+    logger.info("[%s] Verarbeite UID %d von %s: %s", account.user, uid, sender, subject)
 
     pdfs, xmls = _extract_attachments(msg)
 
     if not pdfs and not xmls:
-        logger.info("UID %d: keine PDF/XML-Anhänge – übersprungen.", uid)
+        logger.info("[%s] UID %d: keine PDF/XML-Anhänge – übersprungen.", account.user, uid)
         return
 
     payment_data, source = _extract_payment_data(pdfs, xmls)
 
     if not payment_data:
-        logger.info("UID %d: keine Zahlungsdaten extrahierbar – übersprungen.", uid)
+        logger.info("[%s] UID %d: keine Zahlungsdaten extrahierbar – übersprungen.",
+                    account.user, uid)
         return
 
     if not payment_data.get("iban"):
-        logger.warning("UID %d: IBAN fehlt – übersprungen.", uid)
+        logger.warning("[%s] UID %d: IBAN fehlt – übersprungen.", account.user, uid)
         return
 
     logger.info(
-        "UID %d: Zahlungsdaten gefunden (Quelle: %s)\n"
+        "[%s] UID %d: Zahlungsdaten gefunden (Quelle: %s)\n"
         "  Empfänger:        %s\n"
         "  IBAN:             %s\n"
         "  BIC:              %s\n"
         "  Betrag:           EUR %.2f\n"
         "  Verwendungszweck: %s",
-        uid,
-        source,
+        account.user, uid, source,
         payment_data.get("name") or "-",
         payment_data.get("iban") or "-",
         payment_data.get("bic") or "-",
@@ -221,7 +275,7 @@ def _handle_message(uid: int, raw: bytes) -> None:
         source=source,
         reply_to_message_id=message_id,
     )
-    logger.info("UID %d: GiroCode erfolgreich gesendet.", uid)
+    logger.info("[%s] UID %d: GiroCode erfolgreich gesendet.", account.user, uid)
 
 
 def _extract_payment_data(
@@ -292,4 +346,23 @@ def _extract_attachments(msg: Message) -> tuple[list[bytes], list[bytes]]:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    run()
+    accounts = load_accounts()
+    logger.info("%d IMAP-Konto/Konten geladen.", len(accounts))
+
+    if len(accounts) == 1:
+        # Einzelnes Konto – direkt im Hauptthread ausführen
+        run(accounts[0])
+    else:
+        # Mehrere Konten – je ein Daemon-Thread
+        threads = [
+            threading.Thread(target=run, args=(account,), daemon=True, name=account.user)
+            for account in accounts
+        ]
+        for t in threads:
+            t.start()
+
+        stop = threading.Event()
+        try:
+            stop.wait()
+        except KeyboardInterrupt:
+            logger.info("Invoice Watcher beendet.")

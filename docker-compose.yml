@@ -5,15 +5,24 @@ services:
     restart: unless-stopped
     environment:
       TZ: "Europe/Berlin"
-      IMAP_HOST: "imap.example.com"
-      IMAP_PORT: "993"
-      IMAP_USER: "your@email.com"
-      IMAP_PASSWORD: "your-imap-password"
-      IMAP_MAILBOX: "INBOX"
+      # IMAP-Konto 0
+      IMAP_HOST_0: "imap.example.com"
+      IMAP_PORT_0: "993"
+      IMAP_USER_0: "konto1@example.com"
+      IMAP_PASSWORD_0: "password-konto1"
+      IMAP_MAILBOX_0: "INBOX"
+      # IMAP-Konto 1 (weiteres Konto – bei Bedarf auskommentieren)
+      # IMAP_HOST_1: "imap.other.com"
+      # IMAP_PORT_1: "993"
+      # IMAP_USER_1: "konto2@other.com"
+      # IMAP_PASSWORD_1: "password-konto2"
+      # IMAP_MAILBOX_1: "INBOX"
+      # SMTP (geteilt für alle Konten)
       SMTP_HOST: "smtp.example.com"
       SMTP_PORT: "587"
       SMTP_USER: "your@email.com"
       SMTP_PASSWORD: "your-smtp-password"
+      # LLM-API
       LLM_API_BASE_URL: "https://openrouter.ai/api/v1"
       LLM_API_KEY: "sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxx"
       LLM_MODEL: "qwen/qwen3-vl-8b-instruct"
