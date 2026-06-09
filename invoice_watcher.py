@@ -235,11 +235,6 @@ def _process_unseen(client: IMAPClient, processed_uids: set[int], account: ImapA
             logger.debug("[%s] UID %d: kein Nachrichteninhalt im Fetch-Ergebnis.", account.user, uid)
             continue
         processed_uids.add(uid)
-        # Nachricht explizit als gelesen markieren
-        try:
-            client.set_flags([uid], [b"\\Seen"])
-        except Exception:
-            pass
         try:
             _handle_message(uid, raw, account)
         except Exception as exc:
