@@ -57,6 +57,7 @@ SMTP_HOST = os.environ["SMTP_HOST"]
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.environ["SMTP_USER"]
 SMTP_PASSWORD = os.environ["SMTP_PASSWORD"]
+SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER)
 
 LLM_API_BASE_URL = os.getenv("LLM_API_BASE_URL", "https://openrouter.ai/api/v1")
 LLM_API_KEY = os.environ["LLM_API_KEY"]
@@ -304,6 +305,7 @@ def _handle_message(uid: int, raw: bytes, account: ImapAccount) -> None:
         smtp_port=SMTP_PORT,
         smtp_user=SMTP_USER,
         smtp_password=SMTP_PASSWORD,
+        smtp_from=SMTP_FROM,
         recipient=recipient,
         subject=subject,
         payment_data=payment_data,

@@ -25,6 +25,7 @@ def send_girocode(
     qr_png: bytes,
     source: str = "unbekannt",
     reply_to_message_id: str = "",
+    smtp_from: str = "",
 ) -> None:
     """
     Sendet eine E-Mail mit dem GiroCode-QR-Bild an `recipient`.
@@ -38,9 +39,12 @@ def send_girocode(
     qr_png              : PNG-Bytes des GiroCode-QR-Codes
     source              : Quelle der Daten ("ZUGFeRD/Factur-X", "XRechnung", "LLM")
     reply_to_message_id : Message-ID der Original-Mail fuer Thread-Gruppierung
+    smtp_from           : Absenderadresse fuer den From-Header (Default: smtp_user)
     """
+    sender = smtp_from or smtp_user
+
     msg = MIMEMultipart()
-    msg["From"] = smtp_user
+    msg["From"] = sender
     msg["To"] = recipient
     msg["Subject"] = subject
     if reply_to_message_id:
@@ -67,7 +71,7 @@ def send_girocode(
     img_part.add_header("Content-Disposition", "attachment", filename="girocode.png")
     msg.attach(img_part)
 
-    _send(smtp_host, smtp_port, smtp_user, smtp_password, recipient, msg)
+    _send(smtp_host, smtp_port, smtp_user, smtp_password, sender, recipient, msg)
     logger.info("GiroCode-E-Mail gesendet an %s (Betreff: %s)", recipient, msg["Subject"])
 
 
@@ -76,6 +80,7 @@ def _send(
     port: int,
     user: str,
     password: str,
+    sender: str,
     recipient: str,
     msg: MIMEMultipart,
 ) -> None:
@@ -83,11 +88,11 @@ def _send(
     if port == 465:
         with smtplib.SMTP_SSL(host, port) as server:
             server.login(user, password)
-            server.sendmail(user, [recipient], msg.as_bytes())
+            server.sendmail(sender, [recipient], msg.as_bytes())
     else:
         with smtplib.SMTP(host, port, timeout=30) as server:
             server.ehlo()
             server.starttls()
             server.ehlo()
             server.login(user, password)
-            server.sendmail(user, [recipient], msg.as_bytes())
+            server.sendmail(sender, [recipient], msg.as_bytes())
