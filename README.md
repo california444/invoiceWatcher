@@ -84,8 +84,9 @@ Dann `.env` mit den eigenen Zugangsdaten befüllen:
 | `IMAP_MAILBOX` | Zu überwachendes Postfach | `INBOX` |
 | `SMTP_HOST` | SMTP-Serveradresse | `smtp.gmail.com` |
 | `SMTP_PORT` | SMTP-Port (STARTTLS: 587, SSL: 465) | `587` |
-| `SMTP_USER` | Absenderadresse | `you@gmail.com` |
+| `SMTP_USER` | Login-Benutzername für die SMTP-Authentifizierung | `you@gmail.com` |
 | `SMTP_PASSWORD` | SMTP-Passwort / App-Passwort | |
+| `SMTP_FROM` | Optional: Absenderadresse im `From`-Header, falls abweichend von `SMTP_USER` (Login erfolgt weiterhin mit `SMTP_USER`; Provider muss "Senden im Namen von" erlauben, sonst greifen SPF/DKIM nicht) | `noreply@example.com` |
 | `LLM_API_BASE_URL` | API-Endpunkt (OpenAI-kompatibel) | `https://openrouter.ai/api/v1` |
 | `LLM_API_KEY` | API-Key des Anbieters | `sk-or-v1-…` |
 | `LLM_MODEL` | Modell-ID | `qwen/qwen3-vl-8b-instruct` |
