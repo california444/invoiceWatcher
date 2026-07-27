@@ -82,6 +82,8 @@ Dann `.env` mit den eigenen Zugangsdaten befüllen:
 | `IMAP_USER` | E-Mail-Adresse | `you@gmail.com` |
 | `IMAP_PASSWORD` | IMAP-Passwort / App-Passwort | |
 | `IMAP_MAILBOX` | Zu überwachendes Postfach | `INBOX` |
+| `IMAP_TARGET_RECIPIENT` | Optional: Es werden nur Mails verarbeitet, die (auch) an diese Adresse gehen (To/Cc-Header). Nur passende Mails werden danach als `\Seen` markiert – das verhindert doppelte Verarbeitung/doppelten QR-Code-Versand nach einem Reconnect oder Neustart. Ohne diese Variable wird jede ungelesene Mail mit PDF/XML-Anhang verarbeitet (ohne Markierung als gelesen). | `rechnungen@example.de` |
+| `IMAP_QR_RECIPIENT` | Optional: Die GiroCode-E-Mail wird an diese Adresse gesendet statt an den `To`-Header der eingehenden Rechnungsmail. | `buchhaltung@example.de` |
 | `SMTP_HOST` | SMTP-Serveradresse | `smtp.gmail.com` |
 | `SMTP_PORT` | SMTP-Port (STARTTLS: 587, SSL: 465) | `587` |
 | `SMTP_USER` | Login-Benutzername für die SMTP-Authentifizierung | `you@gmail.com` |
@@ -149,6 +151,23 @@ Für automatischen Start beim Login eine Datei
 ```bash
 launchctl load ~/Library/LaunchAgents/com.invoicewatcher.plist
 ```
+
+### Docker-Image bauen
+
+Das `Dockerfile` klont den Code direkt von GitHub, sodass es ohne lokalen
+Checkout gebaut werden kann. System- und Python-Abhängigkeiten liegen in
+eigenen Layern *vor* dem Code-Klon und bleiben deshalb im Cache, solange sich
+nur der Quellcode ändert. Ein normaler `docker build .` nutzt daher immer den
+alten Klon aus dem Cache – um wirklich den aktuellen Stand zu holen, muss der
+Klon-Layer gezielt invalidiert werden:
+
+```bash
+docker build --build-arg CACHEBUST=$(date +%s) -t california444/invoicewatcher:latest .
+```
+
+Das baut nur den (schnellen) Klon-Schritt neu, apt-get/pip-Installation
+bleiben unangetastet. Nur bei Änderungen an `requirements.txt` lohnt sich ein
+kompletter Rebuild (`docker build --no-cache .`).
 
 ## Unterstützte Rechnungsformate
 
@@ -234,3 +253,12 @@ LLM-Fallback.
 - Port 587: STARTTLS wird erwartet – Anbieter muss STARTTLS unterstützen.
 - Port 465: SMTP_SSL – älteres, aber weit verbreitetes Verfahren.
 - Bei Gmail / GMX unbedingt App-Passwörter verwenden.
+
+### Rechnung wird mehrfach verarbeitet / GiroCode kommt doppelt an
+
+Ohne `IMAP_TARGET_RECIPIENT` markiert der Watcher verarbeitete Mails nicht als
+gelesen (damit sie im Postfach ungelesen bleiben). Bei jedem Reconnect
+(Netzwerk-Hänger, IDLE-Timeout, Neustart) gilt die Mail dann wieder als neu und
+wird erneut verarbeitet. Abhilfe: `IMAP_TARGET_RECIPIENT` setzen – nur Mails an
+diese Adresse werden verarbeitet und anschließend serverseitig als `\Seen`
+markiert, sodass sie nach einem Reconnect nicht erneut auftauchen.

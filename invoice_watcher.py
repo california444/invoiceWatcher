@@ -27,6 +27,7 @@ import threading
 import time
 from dataclasses import dataclass
 from email.message import Message
+from email.utils import getaddresses
 from typing import Optional
 
 import certifi
@@ -81,6 +82,8 @@ class ImapAccount:
     user: str
     password: str
     mailbox: str
+    target_recipient: Optional[str] = None
+    qr_recipient: Optional[str] = None
 
 
 def load_accounts() -> list[ImapAccount]:
@@ -100,6 +103,8 @@ def load_accounts() -> list[ImapAccount]:
             user=os.environ[f"IMAP_USER_{index}"],
             password=os.environ[f"IMAP_PASSWORD_{index}"],
             mailbox=os.getenv(f"IMAP_MAILBOX_{index}", "INBOX"),
+            target_recipient=os.getenv(f"IMAP_TARGET_RECIPIENT_{index}"),
+            qr_recipient=os.getenv(f"IMAP_QR_RECIPIENT_{index}"),
         ))
         index += 1
 
@@ -111,6 +116,8 @@ def load_accounts() -> list[ImapAccount]:
             user=os.environ["IMAP_USER"],
             password=os.environ["IMAP_PASSWORD"],
             mailbox=os.getenv("IMAP_MAILBOX", "INBOX"),
+            target_recipient=os.getenv("IMAP_TARGET_RECIPIENT"),
+            qr_recipient=os.getenv("IMAP_QR_RECIPIENT"),
         ))
 
     if not accounts:
@@ -237,18 +244,42 @@ def _process_unseen(client: IMAPClient, processed_uids: set[int], account: ImapA
             continue
         processed_uids.add(uid)
         try:
-            _handle_message(uid, raw, account)
+            mark_seen = _handle_message(uid, raw, account)
         except Exception as exc:
             logger.error("[%s] Fehler bei Verarbeitung von UID %d: %s",
                          account.user, uid, exc, exc_info=True)
+            continue
+        if mark_seen:
+            # Markiert die Nachricht dauerhaft (serverseitig) als bearbeitet, damit sie
+            # nach einem Reconnect/Neustart nicht erneut verarbeitet wird (Duplikate).
+            try:
+                client.add_flags([uid], [b"\\Seen"])
+            except Exception as exc:
+                logger.warning("[%s] UID %d: konnte nicht als gelesen markiert werden: %s",
+                                account.user, uid, exc)
 
 
 # ---------------------------------------------------------------------------
 # Nachrichtenverarbeitung
 # ---------------------------------------------------------------------------
 
-def _handle_message(uid: int, raw: bytes, account: ImapAccount) -> None:
-    """Verarbeitet eine einzelne E-Mail-Nachricht."""
+def _matches_target_recipient(msg: Message, target: str) -> bool:
+    """Prüft, ob `target` unter den Empfängern (To/Cc) der Nachricht ist."""
+    target = target.strip().lower()
+    addresses = getaddresses(msg.get_all("To", []) + msg.get_all("Cc", []))
+    return any(addr.strip().lower() == target for _, addr in addresses)
+
+
+def _handle_message(uid: int, raw: bytes, account: ImapAccount) -> bool:
+    """
+    Verarbeitet eine einzelne E-Mail-Nachricht.
+
+    Gibt zurück, ob die Nachricht als bearbeitet (\\Seen) markiert werden soll.
+    Nur Nachrichten, die den konfigurierten Zieladressen-Filter passieren, werden
+    markiert – so bleiben alle anderen Mails im Postfach unangetastet, während
+    bereits behandelte Rechnungsmails nach einem Reconnect/Neustart nicht erneut
+    verarbeitet werden.
+    """
     msg = email.message_from_bytes(raw)
     subject = msg.get("Subject", "(kein Betreff)")
     sender = msg.get("From", "?")
@@ -256,25 +287,37 @@ def _handle_message(uid: int, raw: bytes, account: ImapAccount) -> None:
     recipient = msg.get("To", "")
     if not recipient:
         logger.warning("[%s] UID %d: kein To-Header – übersprungen.", account.user, uid)
-        return
+        return False
+
+    # Zieladresse für die GiroCode-Mail: konfigurierte Adresse, sonst To-Header
+    # der eingehenden Rechnungsmail.
+    qr_recipient = account.qr_recipient or recipient
+
+    if account.target_recipient and not _matches_target_recipient(msg, account.target_recipient):
+        logger.debug(
+            "[%s] UID %d: nicht an Zieladresse %s adressiert – übersprungen.",
+            account.user, uid, account.target_recipient,
+        )
+        return False
+
     logger.info("[%s] Verarbeite UID %d von %s: %s", account.user, uid, sender, subject)
 
     pdfs, xmls = _extract_attachments(msg)
 
     if not pdfs and not xmls:
         logger.info("[%s] UID %d: keine PDF/XML-Anhänge – übersprungen.", account.user, uid)
-        return
+        return True
 
     payment_data, source = _extract_payment_data(pdfs, xmls)
 
     if not payment_data:
         logger.info("[%s] UID %d: keine Zahlungsdaten extrahierbar – übersprungen.",
                     account.user, uid)
-        return
+        return True
 
     if not payment_data.get("iban"):
         logger.warning("[%s] UID %d: IBAN fehlt – übersprungen.", account.user, uid)
-        return
+        return True
 
     logger.info(
         "[%s] UID %d: Zahlungsdaten gefunden (Quelle: %s)\n"
@@ -306,7 +349,7 @@ def _handle_message(uid: int, raw: bytes, account: ImapAccount) -> None:
         smtp_user=SMTP_USER,
         smtp_password=SMTP_PASSWORD,
         smtp_from=SMTP_FROM,
-        recipient=recipient,
+        recipient=qr_recipient,
         subject=subject,
         payment_data=payment_data,
         qr_png=qr_png,
@@ -314,6 +357,7 @@ def _handle_message(uid: int, raw: bytes, account: ImapAccount) -> None:
         reply_to_message_id=message_id,
     )
     logger.info("[%s] UID %d: GiroCode erfolgreich gesendet.", account.user, uid)
+    return True
 
 
 def _extract_payment_data(
