@@ -12,7 +12,7 @@ import logging
 import re
 from typing import Optional
 
-import fitz  # PyMuPDF
+import pymupdf
 from openai import OpenAI, APIError
 
 logger = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ def extract_from_pdf(
 def _pdf_to_images_b64(pdf_bytes: bytes) -> list[str]:
     """Rendert jede PDF-Seite als PNG und gibt Base64-kodierte Strings zurück."""
     try:
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
         images: list[str] = []
         for page in doc:
             pix = page.get_pixmap(dpi=150)

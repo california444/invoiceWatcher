@@ -33,7 +33,7 @@ Neue E-Mail mit PDF-Anhang
 
 ## Voraussetzungen
 
-- Python 3.11+
+- Python 3.11+ (Docker-Image: Python 3.13 auf Debian 13 "trixie")
 - API-Key eines OpenAI-kompatiblen Anbieters (z. B. [OpenRouter](https://openrouter.ai))
 
 ## LLM-API einrichten (einmalig)

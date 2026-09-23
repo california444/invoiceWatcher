@@ -1,6 +1,6 @@
 # Basis-Image als ARG, damit es nur an einer Stelle steht und der Watcher
 # es zur Laufzeit ausgeben kann.
-ARG BASE_IMAGE=python:3.11-slim-bookworm
+ARG BASE_IMAGE=python:3.13-slim-trixie
 FROM ${BASE_IMAGE}
 
 ENV PYTHONUNBUFFERED=1

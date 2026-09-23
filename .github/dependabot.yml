@@ -18,7 +18,7 @@ updates:
           - "minor"
           - "patch"
 
-  # Basis-Image im Dockerfile (python:3.11-slim-bookworm)
+  # Basis-Image im Dockerfile (python:3.13-slim-trixie)
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
