@@ -423,6 +423,10 @@ def _extract_attachments(msg: Message) -> tuple[list[bytes], list[bytes]]:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
+    # Vom Docker-Build gesetzt (siehe Dockerfile); lokal leer.
+    if os.getenv("APP_REVISION"):
+        logger.info("Revision %s (Basis-Image %s)",
+                    os.getenv("APP_REVISION"), os.getenv("APP_BASE_IMAGE") or "?")
     accounts = load_accounts()
     logger.info("%d IMAP-Konto/Konten geladen.", len(accounts))
 

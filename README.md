@@ -151,22 +151,46 @@ Für automatischen Start beim Login eine Datei
 launchctl load ~/Library/LaunchAgents/com.invoicewatcher.plist
 ```
 
-### Docker-Image bauen
+### Docker
 
-Das `Dockerfile` klont den Code direkt von GitHub, sodass es ohne lokalen
-Checkout gebaut werden kann. System- und Python-Abhängigkeiten liegen in
-eigenen Layern *vor* dem Code-Klon und bleiben deshalb im Cache, solange sich
-nur der Quellcode ändert. Ein normaler `docker build .` nutzt daher immer den
-alten Klon aus dem Cache – um wirklich den aktuellen Stand zu holen, muss der
-Klon-Layer gezielt invalidiert werden:
+Bei jedem Push auf `main` baut GitHub Actions das Image für `linux/arm64`
+(Raspberry Pi) und veröffentlicht es unter
+`ghcr.io/california444/invoicewatcher`. Zusätzlich wird es jeden Montag neu
+gebaut, damit Sicherheitsupdates des Basis-Images ankommen. Verfügbare Tags:
+
+| Tag | Bedeutung |
+| --- | --- |
+| `latest` | aktueller Stand von `main` |
+| `sha-<commit>` | genau dieser Commit – für Rollbacks |
+| `<JJJJMMTT>` | Stand des jeweiligen Build-Tages |
+
+Starten mit der mitgelieferten [docker-compose.yml](docker-compose.yml)
+(Zugangsdaten vorher eintragen):
 
 ```bash
-docker build --build-arg CACHEBUST=$(date +%s) -t california444/invoicewatcher:latest .
+docker compose up -d
 ```
 
-Das baut nur den (schnellen) Klon-Schritt neu, apt-get/pip-Installation
-bleiben unangetastet. Nur bei Änderungen an `requirements.txt` lohnt sich ein
-kompletter Rebuild (`docker build --no-cache .`).
+Auf eine neue Version aktualisieren:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Selbst bauen (optional):
+
+```bash
+docker build -t invoicewatcher .
+```
+
+Der Build nimmt den Quellcode aus dem Arbeitsverzeichnis, nicht aus dem
+GitHub-Repo – das gebaute Image entspricht also dem ausgecheckten Stand.
+
+> **Hinweis:** Neue Packages in der GitHub Container Registry sind zunächst
+> privat. Für einen Pull ohne Anmeldung muss das Package in den
+> Package-Einstellungen auf "public" gestellt werden, sonst ist auf dem Host
+> ein `docker login ghcr.io` mit einem PAT (Scope `read:packages`) nötig.
+> Die Datei `.env` ist durch `.dockerignore` vom Image-Build ausgeschlossen.
 
 ## Unterstützte Rechnungsformate
 
