@@ -1,6 +1,6 @@
 services:
   invoice-watcher:
-    image: california444/invoicewatcher:latest
+    image: ghcr.io/california444/invoicewatcher:latest
     container_name: invoice-watcher
     restart: unless-stopped
     environment:

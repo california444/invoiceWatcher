@@ -1,35 +1,40 @@
-FROM python:3.11-slim-bookworm
+# Basis-Image als ARG, damit es nur an einer Stelle steht und der Watcher
+# es zur Laufzeit ausgeben kann.
+ARG BASE_IMAGE=python:3.11-slim-bookworm
+FROM ${BASE_IMAGE}
 
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
-# Systemabhängigkeiten für PyMuPDF und git (ändert sich praktisch nie)
+# Systemabhängigkeiten für PyMuPDF (ändert sich praktisch nie)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libmupdf-dev git \
+    && apt-get install -y --no-install-recommends libmupdf-dev \
     && rm -rf /var/lib/apt/lists/*
 
-ARG GIT_REPO=https://github.com/california444/invoiceWatcher.git
-ARG GIT_REF=main
-
-# Nur requirements.txt holen, damit die pip-install-Schicht unabhängig vom
-# restlichen Quellcode im Cache bleibt (ändert sich selten).
-RUN git clone --depth=1 --branch ${GIT_REF} ${GIT_REPO} /tmp/src \
-    && cp /tmp/src/requirements.txt . \
-    && rm -rf /tmp/src
-
-# Abhängigkeiten installieren – Cache-Hit, solange requirements.txt gleich bleibt
+# Erst nur requirements.txt kopieren, dann installieren: solange sich die
+# Datei nicht ändert, trifft dieser Layer den Build-Cache, auch wenn am
+# Quellcode geschraubt wurde.
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Aktuellen Quellcode klonen. CACHEBUST erzwingt bei Bedarf einen frischen
-# Klon, ohne die teuren Layer oben (apt-get/pip) erneut auszuführen:
-#   docker build --build-arg CACHEBUST=$(date +%s) .
-ARG CACHEBUST=0
-RUN git clone --depth=1 --branch ${GIT_REF} ${GIT_REPO} /tmp/src \
-    && cp -a /tmp/src/. . \
-    && rm -rf /tmp/src
+# Quellcode aus dem Build-Kontext statt per "git clone" zur Build-Zeit.
+# Der Clone war über seine Kommandozeile cachebar und lieferte ohne
+# CACHEBUST stillschweigend einen alten Stand; so entspricht das Image
+# genau dem Commit, aus dem es gebaut wurde.
+COPY *.py ./
 
 # Nicht-Root-Benutzer
 RUN addgroup --system app && adduser --system --ingroup app app
+
+# Herkunft des Builds bewusst ganz am Ende: APP_REVISION ändert sich mit
+# jedem Commit und würde weiter oben den pip-install-Layer jedes Mal
+# invalidieren. ARGs von vor dem FROM sind hier nicht mehr sichtbar und
+# müssen erneut deklariert werden.
+ARG BASE_IMAGE
+ARG APP_REVISION=""
+ENV APP_BASE_IMAGE=${BASE_IMAGE} \
+    APP_REVISION=${APP_REVISION}
+
 USER app
 
 ENTRYPOINT ["python", "invoice_watcher.py"]
