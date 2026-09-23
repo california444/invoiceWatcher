@@ -5,5 +5,5 @@ lxml>=5.0.0
 PyMuPDF>=1.28.2
 Pillow>=10.0.0
 qrcode[pil]>=7.4.0
-python-dotenv>=1.0.0
+python-dotenv>=1.2.3
 openai>=3.16.2
