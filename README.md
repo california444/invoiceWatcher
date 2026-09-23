@@ -83,7 +83,6 @@ Dann `.env` mit den eigenen Zugangsdaten befüllen:
 | `IMAP_PASSWORD` | IMAP-Passwort / App-Passwort | |
 | `IMAP_MAILBOX` | Zu überwachendes Postfach | `INBOX` |
 | `IMAP_TARGET_RECIPIENT` | Optional: Es werden nur Mails verarbeitet, die (auch) an diese Adresse gehen (To/Cc-Header). Nur passende Mails werden danach als `\Seen` markiert – das verhindert doppelte Verarbeitung/doppelten QR-Code-Versand nach einem Reconnect oder Neustart. Ohne diese Variable wird jede ungelesene Mail mit PDF/XML-Anhang verarbeitet (ohne Markierung als gelesen). | `rechnungen@example.de` |
-| `IMAP_QR_RECIPIENT` | Optional: Die GiroCode-E-Mail wird an diese Adresse gesendet statt an den Absender (`From`-Header) der eingehenden Rechnungsmail. | `buchhaltung@example.de` |
 | `SMTP_HOST` | SMTP-Serveradresse | `smtp.gmail.com` |
 | `SMTP_PORT` | SMTP-Port (STARTTLS: 587, SSL: 465) | `587` |
 | `SMTP_USER` | Login-Benutzername für die SMTP-Authentifizierung | `you@gmail.com` |

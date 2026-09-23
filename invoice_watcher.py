@@ -7,7 +7,7 @@ Workflow:
   3. Strukturierte Rechnung parsen (ZUGFeRD/Factur-X oder XRechnung).
   4. Fallback: LLM (OpenAI-kompatible API) analysiert PDF-Seiten als Bilder.
   5. Aus den Zahlungsdaten einen GiroCode/EPC-QR-Code erzeugen.
-  6. QR-Code per E-Mail an den Absender (oder die konfigurierte Adresse) senden.
+  6. QR-Code per E-Mail an den Absender der Rechnungsmail zurücksenden.
 
 Mehrere IMAP-Konten:
   Nummerierte Env-Vars IMAP_HOST_0, IMAP_HOST_1, … definieren mehrere Konten.
@@ -83,7 +83,6 @@ class ImapAccount:
     password: str
     mailbox: str
     target_recipient: Optional[str] = None
-    qr_recipient: Optional[str] = None
 
 
 def load_accounts() -> list[ImapAccount]:
@@ -104,7 +103,6 @@ def load_accounts() -> list[ImapAccount]:
             password=os.environ[f"IMAP_PASSWORD_{index}"],
             mailbox=os.getenv(f"IMAP_MAILBOX_{index}", "INBOX"),
             target_recipient=os.getenv(f"IMAP_TARGET_RECIPIENT_{index}"),
-            qr_recipient=os.getenv(f"IMAP_QR_RECIPIENT_{index}"),
         ))
         index += 1
 
@@ -117,7 +115,6 @@ def load_accounts() -> list[ImapAccount]:
             password=os.environ["IMAP_PASSWORD"],
             mailbox=os.getenv("IMAP_MAILBOX", "INBOX"),
             target_recipient=os.getenv("IMAP_TARGET_RECIPIENT"),
-            qr_recipient=os.getenv("IMAP_QR_RECIPIENT"),
         ))
 
     if not accounts:
@@ -292,9 +289,8 @@ def _handle_message(uid: int, raw: bytes, account: ImapAccount) -> bool:
         )
         return False
 
-    # Zieladresse für die GiroCode-Mail: konfigurierte Adresse, sonst der
-    # Absender (From-Header) der eingehenden Rechnungsmail.
-    qr_recipient = account.qr_recipient or parseaddr(msg.get("From", ""))[1]
+    # Die GiroCode-Mail geht an den Absender (From-Header) der Rechnungsmail zurück.
+    qr_recipient = parseaddr(msg.get("From", ""))[1]
     if not qr_recipient:
         logger.warning("[%s] UID %d: kein gültiger From-Header – übersprungen.", account.user, uid)
         return False
