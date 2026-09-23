@@ -33,7 +33,7 @@ def send_girocode(
     Parameters
     ----------
     smtp_host, smtp_port, smtp_user, smtp_password : SMTP-Verbindungsdaten
-    recipient           : To-Adresse der eingehenden Mail
+    recipient           : Absender der eingehenden Rechnungsmail
     subject             : Betreff der Original-Rechnung
     payment_data        : dict mit name, iban, bic, amount, reference
     qr_png              : PNG-Bytes des GiroCode-QR-Codes
