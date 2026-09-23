@@ -93,5 +93,5 @@ jobs:
         run: >
           docker run --rm --entrypoint python
           ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
-          -c "import imapclient, certifi, facturx, lxml, fitz, PIL, qrcode, dotenv, openai;
+          -c "import imapclient, certifi, facturx, lxml, pymupdf, PIL, qrcode, dotenv, openai;
           import epc_qr, invoice_parser, llm_extractor, mailer; print('ok')"
