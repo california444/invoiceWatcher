@@ -14,7 +14,7 @@ services:
       # Optional: nur Mails an diese Adresse (To/Cc) verarbeiten; werden danach
       # als gelesen markiert (verhindert Doppelverarbeitung nach Neustart)
       # IMAP_TARGET_RECIPIENT_0: "rechnungen@example.de"
-      # Optional: GiroCode-Mail an diese Adresse senden statt an den To-Header
+      # Optional: GiroCode-Mail an diese Adresse senden statt an den Absender (From-Header)
       # der eingehenden Rechnungsmail
       # IMAP_QR_RECIPIENT_0: "buchhaltung@example.de"
       # IMAP-Konto 1 (weiteres Konto – bei Bedarf auskommentieren)

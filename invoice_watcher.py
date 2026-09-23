@@ -7,7 +7,7 @@ Workflow:
   3. Strukturierte Rechnung parsen (ZUGFeRD/Factur-X oder XRechnung).
   4. Fallback: LLM (OpenAI-kompatible API) analysiert PDF-Seiten als Bilder.
   5. Aus den Zahlungsdaten einen GiroCode/EPC-QR-Code erzeugen.
-  6. QR-Code per E-Mail an die konfigurierte Adresse senden.
+  6. QR-Code per E-Mail an den Absender (oder die konfigurierte Adresse) senden.
 
 Mehrere IMAP-Konten:
   Nummerierte Env-Vars IMAP_HOST_0, IMAP_HOST_1, … definieren mehrere Konten.
@@ -27,7 +27,7 @@ import threading
 import time
 from dataclasses import dataclass
 from email.message import Message
-from email.utils import getaddresses
+from email.utils import getaddresses, parseaddr
 from typing import Optional
 
 import certifi
@@ -284,20 +284,19 @@ def _handle_message(uid: int, raw: bytes, account: ImapAccount) -> bool:
     subject = msg.get("Subject", "(kein Betreff)")
     sender = msg.get("From", "?")
     message_id = msg.get("Message-ID", "")
-    recipient = msg.get("To", "")
-    if not recipient:
-        logger.warning("[%s] UID %d: kein To-Header – übersprungen.", account.user, uid)
-        return False
-
-    # Zieladresse für die GiroCode-Mail: konfigurierte Adresse, sonst To-Header
-    # der eingehenden Rechnungsmail.
-    qr_recipient = account.qr_recipient or recipient
 
     if account.target_recipient and not _matches_target_recipient(msg, account.target_recipient):
         logger.debug(
             "[%s] UID %d: nicht an Zieladresse %s adressiert – übersprungen.",
             account.user, uid, account.target_recipient,
         )
+        return False
+
+    # Zieladresse für die GiroCode-Mail: konfigurierte Adresse, sonst der
+    # Absender (From-Header) der eingehenden Rechnungsmail.
+    qr_recipient = account.qr_recipient or parseaddr(msg.get("From", ""))[1]
+    if not qr_recipient:
+        logger.warning("[%s] UID %d: kein gültiger From-Header – übersprungen.", account.user, uid)
         return False
 
     logger.info("[%s] Verarbeite UID %d von %s: %s", account.user, uid, sender, subject)
