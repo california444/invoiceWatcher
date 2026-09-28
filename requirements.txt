@@ -6,4 +6,4 @@ PyMuPDF>=1.28.2
 Pillow>=12.3.0
 qrcode[pil]>=8.2
 python-dotenv>=1.2.3
-openai>=3.16.2
+openai>=3.19.2
