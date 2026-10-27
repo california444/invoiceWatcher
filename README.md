@@ -241,9 +241,26 @@ invoice_watcher/
 ├── llm_extractor.py     # LLM-Fallback via OpenAI-kompatibler API
 ├── epc_qr.py            # EPC-QR-Code-Erzeugung
 ├── mailer.py            # SMTP-E-Mail-Versand
+├── tests/               # pytest, Testrechnungen werden zur Laufzeit erzeugt
 ├── requirements.txt
+├── requirements-dev.txt # zusätzlich pytest
 └── .env.example
 ```
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+Die Tests brauchen weder Zugangsdaten noch Netzwerk: IMAP, SMTP und die LLM-API werden
+durch Attrappen ersetzt, ZUGFeRD-PDFs und XRechnung-XMLs erzeugen die Tests selbst.
+Deprecation-Warnungen gelten als Fehler (siehe `pytest.ini`), damit veraltete API-Aufrufe
+schon beim Update auffallen.
+
+In GitHub Actions laufen die Tests bei jedem Pull Request (auch von Dependabot) im
+frisch gebauten Docker-Image, also mit denselben Bibliotheksversionen wie im Betrieb.
 
 ## Fehlerbehebung
 

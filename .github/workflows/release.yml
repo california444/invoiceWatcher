@@ -95,3 +95,18 @@ jobs:
           ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
           -c "import imapclient, certifi, facturx, lxml, pymupdf, PIL, qrcode, dotenv, openai;
           import epc_qr, invoice_parser, llm_extractor, mailer; print('ok')"
+
+      - name: Tests (pytest im gebauten Image)
+        if: env.PUSH != 'true'
+        # Im Image statt in einer eigenen Python-Umgebung: so laufen die Tests
+        # gegen genau die Bibliotheksversionen und das Python, die auch
+        # produktiv laufen. Das Repo wird nur lesend eingehaengt; pytest kommt
+        # erst hier dazu und landet nicht im veroeffentlichten Image.
+        run: >
+          docker run --rm --user root
+          -e PYTHONDONTWRITEBYTECODE=1
+          -v "$PWD:/src:ro" -w /src
+          --entrypoint sh
+          ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          -c "pip install --no-cache-dir --root-user-action=ignore -q -r requirements-dev.txt
+          && python -m pytest -p no:cacheprovider"
