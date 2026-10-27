@@ -34,13 +34,16 @@ def parse_pdf(pdf_bytes: bytes) -> Optional[dict]:
     Gibt ein dict {name, iban, bic, amount, reference} zurück oder None.
     """
     try:
-        from facturx import get_facturx_xml_from_pdf  # pip install factur-x
+        from facturx import get_xml_from_pdf  # pip install factur-x
 
+        # get_facturx_xml_from_pdf() akzeptiert seit factur-x 7.6 nur noch
+        # factur-x.xml und ZUGFeRD-invoice.xml. ZUGFeRD mit XRechnung-Profil
+        # bettet aber xrechnung.xml ein, daher alle XML-Anhänge zulassen;
+        # get_xml_from_pdf() verwirft Dateien ohne E-Rechnungs-Flavor selbst.
         pdf_file = io.BytesIO(pdf_bytes)
-        result = get_facturx_xml_from_pdf(pdf_file, check_xsd=False)
-
-        # API gibt (xml_bytes, filename) zurück
-        xml_bytes = result[0] if isinstance(result, tuple) else result
+        _filename, xml_bytes = get_xml_from_pdf(
+            pdf_file, check_xsd=False, filenames=["*.xml"]
+        )
         if not xml_bytes:
             return None
 
@@ -87,7 +90,8 @@ def _parse_cii_xml(xml_bytes: bytes) -> Optional[dict]:
 
         def first(xpath: str) -> str:
             results = root.xpath(xpath, namespaces=_NS_CII)
-            return results[0].strip() if results else ""
+            # xpath() liefert Elemente, nicht deren Text
+            return (results[0].text or "").strip() if results else ""
 
         iban = first(
             ".//ram:SpecifiedTradeSettlementPaymentMeans"
@@ -133,7 +137,8 @@ def _parse_ubl_xml(root: etree._Element) -> Optional[dict]:
     try:
         def first(xpath: str) -> str:
             results = root.xpath(xpath, namespaces=_NS_UBL)
-            return results[0].strip() if results else ""
+            # xpath() liefert Elemente, nicht deren Text
+            return (results[0].text or "").strip() if results else ""
 
         iban = first(".//cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:ID")
         bic = first(
