@@ -1,6 +1,6 @@
 imapclient>=4.1.0
 certifi>=2026.10.23
-factur-x>=7.8
+factur-x>=7.9
 lxml>=6.1.3
 PyMuPDF>=2.0
 Pillow>=13.0.0
